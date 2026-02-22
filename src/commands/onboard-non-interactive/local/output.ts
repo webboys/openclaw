@@ -17,6 +17,25 @@ export function logNonInteractiveOnboardingJson(params: {
   daemonRuntime?: string;
   skipSkills?: boolean;
   skipHealth?: boolean;
+  controlUi?: {
+    httpUrl: string;
+    wsUrl: string;
+  };
+  auth?: {
+    mode: string;
+    hasGatewayToken: boolean;
+    hasGatewayPassword: boolean;
+  };
+  verification?: {
+    gatewayProbe: {
+      ok: boolean;
+      detail?: string;
+    };
+    healthCheck: {
+      attempted: boolean;
+      passed: boolean;
+    };
+  };
 }) {
   if (!params.opts.json) {
     return;
@@ -32,6 +51,9 @@ export function logNonInteractiveOnboardingJson(params: {
         daemonRuntime: params.daemonRuntime,
         skipSkills: Boolean(params.skipSkills),
         skipHealth: Boolean(params.skipHealth),
+        controlUi: params.controlUi,
+        auth: params.auth,
+        verification: params.verification,
       },
       null,
       2,

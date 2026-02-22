@@ -176,6 +176,82 @@ const logRunner = (message, deps) => {
   deps.stderr.write(`[openclaw] ${message}\n`);
 };
 
+const waitForChildExit = (child) =>
+  new Promise((resolve) => {
+    let settled = false;
+    const done = (result) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolve(result);
+    };
+
+    child.on("error", (error) => done({ error }));
+    child.on("exit", (exitCode, exitSignal) => done({ exitCode, exitSignal }));
+  });
+
+const isMissingCommandError = (value) => {
+  return value?.code === "ENOENT";
+};
+
+const resolveBuildAttempts = (platform) => {
+  if (platform === "win32") {
+    return [
+      {
+        label: "pnpm",
+        cmd: "pnpm.cmd",
+        args: compilerArgs,
+      },
+      {
+        label: "corepack pnpm",
+        cmd: "corepack.cmd",
+        args: ["pnpm", ...compilerArgs],
+      },
+    ];
+  }
+
+  return [
+    {
+      label: "pnpm",
+      cmd: "pnpm",
+      args: compilerArgs,
+    },
+    {
+      label: "corepack pnpm",
+      cmd: "corepack",
+      args: ["pnpm", ...compilerArgs],
+    },
+  ];
+};
+
+const runBuild = async (deps) => {
+  const attempts = resolveBuildAttempts(deps.platform);
+  for (let i = 0; i < attempts.length; i += 1) {
+    const attempt = attempts[i];
+    const build = deps.spawn(attempt.cmd, attempt.args, {
+      cwd: deps.cwd,
+      env: deps.env,
+      stdio: "inherit",
+    });
+    const result = await waitForChildExit(build);
+    if (result.error) {
+      if (isMissingCommandError(result.error) && i + 1 < attempts.length) {
+        const nextLabel = attempts[i + 1]?.label ?? "fallback command";
+        logRunner(
+          `Build command "${attempt.label}" unavailable (${result.error.code}); retrying with ${nextLabel}.`,
+          deps,
+        );
+        continue;
+      }
+      throw result.error;
+    }
+    return result;
+  }
+
+  return { exitCode: 1, exitSignal: null };
+};
+
 const runOpenClaw = async (deps) => {
   const nodeProcess = deps.spawn(deps.execPath, ["openclaw.mjs", ...deps.args], {
     cwd: deps.cwd,
@@ -231,18 +307,13 @@ export async function runNodeMain(params = {}) {
   }
 
   logRunner("Building TypeScript (dist is stale).", deps);
-  const buildCmd = deps.platform === "win32" ? "cmd.exe" : "pnpm";
-  const buildArgs =
-    deps.platform === "win32" ? ["/d", "/s", "/c", "pnpm", ...compilerArgs] : compilerArgs;
-  const build = deps.spawn(buildCmd, buildArgs, {
-    cwd: deps.cwd,
-    env: deps.env,
-    stdio: "inherit",
-  });
-
-  const buildRes = await new Promise((resolve) => {
-    build.on("exit", (exitCode, exitSignal) => resolve({ exitCode, exitSignal }));
-  });
+  let buildRes;
+  try {
+    buildRes = await runBuild(deps);
+  } catch (error) {
+    logRunner(`Build failed to start: ${error?.message ?? "unknown error"}`, deps);
+    return 1;
+  }
   if (buildRes.exitSignal) {
     return 1;
   }

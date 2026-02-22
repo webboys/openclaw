@@ -369,9 +369,10 @@ export async function runOnboardingWizard(
       const { listQuickstartProviderPresets, resolveApiKeyOptionKeyForAuthChoice } =
         await import("../commands/quickstart-provider.js");
       const quickstartProviders = listQuickstartProviderPresets();
+      type QuickstartSelection = (typeof quickstartProviders)[number]["id"] | "skip" | "advanced";
       const presetById = new Map(quickstartProviders.map((preset) => [preset.id, preset] as const));
 
-      const quickstartSelection = await prompter.select<string>({
+      const quickstartSelection = await prompter.select<QuickstartSelection>({
         message: "Quickstart provider",
         options: [
           ...quickstartProviders.map((preset) => ({

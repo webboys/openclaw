@@ -25,7 +25,7 @@ describe("run-node script", () => {
         await fs.writeFile(indexPath, "<html>sentinel</html>\n", "utf-8");
 
         const nodeCalls: string[][] = [];
-        const spawn = (cmd: string, args: string[]) => {
+        const spawn = (cmd: string, args: string[], _options: unknown) => {
           if (cmd === "pnpm") {
             fsSync.writeFileSync(argsPath, args.join(" "), "utf-8");
             if (!args.includes("--no-clean")) {
@@ -66,4 +66,74 @@ describe("run-node script", () => {
       });
     },
   );
+
+  it("falls back to corepack pnpm when pnpm is unavailable", async () => {
+    const calls: string[] = [];
+    const missingPnpmError = Object.assign(new Error("spawn pnpm ENOENT"), { code: "ENOENT" });
+    type MockExitCallback = (code: number | null, signal: string | null) => void;
+    type MockErrorCallback = (error: Error) => void;
+    type MockChildProcess = {
+      on: {
+        (event: "exit", cb: MockExitCallback): void | undefined;
+        (event: "error", cb: MockErrorCallback): void | undefined;
+      };
+    };
+
+    const spawn = (cmd: string, args: string[], _options: unknown): MockChildProcess => {
+      calls.push(`${cmd} ${args.join(" ")}`.trim());
+
+      if (cmd === "pnpm") {
+        return {
+          on: (event, cb) => {
+            if (event === "error") {
+              queueMicrotask(() => (cb as MockErrorCallback)(missingPnpmError));
+            }
+            return undefined;
+          },
+        };
+      }
+      if (cmd === "corepack") {
+        return {
+          on: (event, cb) => {
+            if (event === "exit") {
+              queueMicrotask(() => (cb as MockExitCallback)(0, null));
+            }
+            return undefined;
+          },
+        };
+      }
+      if (cmd === process.execPath) {
+        return {
+          on: (event, cb) => {
+            if (event === "exit") {
+              queueMicrotask(() => (cb as MockExitCallback)(0, null));
+            }
+            return undefined;
+          },
+        };
+      }
+      throw new Error(`unexpected command: ${cmd}`);
+    };
+
+    const { runNodeMain } = await import("../../scripts/run-node.mjs");
+    const exitCode = await runNodeMain({
+      cwd: process.cwd(),
+      args: ["--version"],
+      env: {
+        ...process.env,
+        OPENCLAW_FORCE_BUILD: "1",
+        OPENCLAW_RUNNER_LOG: "0",
+      },
+      spawn,
+      execPath: process.execPath,
+      platform: "linux",
+    });
+
+    expect(exitCode).toBe(0);
+    expect(calls).toEqual([
+      "pnpm exec tsdown --no-clean",
+      "corepack pnpm exec tsdown --no-clean",
+      `${process.execPath} openclaw.mjs --version`,
+    ]);
+  });
 });

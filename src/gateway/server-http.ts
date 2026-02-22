@@ -88,6 +88,16 @@ function sendJson(res: ServerResponse, status: number, body: unknown) {
   res.end(JSON.stringify(body));
 }
 
+const gatewayHealthPayload = {
+  ok: true,
+  status: "ok",
+  service: "openclaw-gateway",
+} as const;
+
+function isGatewayHealthPath(pathname: string): boolean {
+  return pathname === "/healthz" || pathname === "/health";
+}
+
 function isCanvasPath(pathname: string): boolean {
   return (
     pathname === A2UI_PATH ||
@@ -506,6 +516,17 @@ export function createGatewayHttpServer(opts: {
         req.url = scopedCanvas.rewrittenUrl;
       }
       const requestPath = new URL(req.url ?? "/", "http://localhost").pathname;
+      if (isGatewayHealthPath(requestPath)) {
+        if (req.method !== "GET") {
+          res.statusCode = 405;
+          res.setHeader("Allow", "GET");
+          res.setHeader("Content-Type", "text/plain; charset=utf-8");
+          res.end("Method Not Allowed");
+          return;
+        }
+        sendJson(res, 200, gatewayHealthPayload);
+        return;
+      }
       if (await handleHooksRequest(req, res)) {
         return;
       }

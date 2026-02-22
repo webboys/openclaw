@@ -10,6 +10,7 @@ import {
   applyWizardMetadata,
   DEFAULT_WORKSPACE,
   ensureWorkspaceAndSessions,
+  probeGatewayReachable,
   resolveControlUiLinks,
   waitForGatewayReachable,
 } from "../onboard-helpers.js";
@@ -94,7 +95,10 @@ export async function runNonInteractiveOnboardingLocal(params: {
   });
 
   const daemonRuntimeRaw = opts.daemonRuntime ?? DEFAULT_GATEWAY_DAEMON_RUNTIME;
+  let healthCheckAttempted = false;
+  let healthCheckPassed = false;
   if (!opts.skipHealth) {
+    healthCheckAttempted = true;
     const links = resolveControlUiLinks({
       bind: gatewayResult.bind as "auto" | "lan" | "loopback" | "custom" | "tailnet",
       port: gatewayResult.port,
@@ -107,7 +111,20 @@ export async function runNonInteractiveOnboardingLocal(params: {
       deadlineMs: 15_000,
     });
     await healthCommand({ json: false, timeoutMs: 10_000 }, runtime);
+    healthCheckPassed = true;
   }
+
+  const links = resolveControlUiLinks({
+    bind: gatewayResult.bind as "auto" | "lan" | "loopback" | "custom" | "tailnet",
+    port: gatewayResult.port,
+    customBindHost: nextConfig.gateway?.customBindHost,
+    basePath: undefined,
+  });
+  const gatewayProbe = await probeGatewayReachable({
+    url: links.wsUrl,
+    token: gatewayResult.authMode === "token" ? gatewayResult.gatewayToken : undefined,
+    password: gatewayResult.authMode === "password" ? opts.gatewayPassword?.trim() : undefined,
+  });
 
   logNonInteractiveOnboardingJson({
     opts,
@@ -125,6 +142,22 @@ export async function runNonInteractiveOnboardingLocal(params: {
     daemonRuntime: opts.installDaemon ? daemonRuntimeRaw : undefined,
     skipSkills: Boolean(opts.skipSkills),
     skipHealth: Boolean(opts.skipHealth),
+    controlUi: {
+      httpUrl: links.httpUrl,
+      wsUrl: links.wsUrl,
+    },
+    auth: {
+      mode: gatewayResult.authMode,
+      hasGatewayToken: Boolean(gatewayResult.gatewayToken),
+      hasGatewayPassword: gatewayResult.authMode === "password",
+    },
+    verification: {
+      gatewayProbe,
+      healthCheck: {
+        attempted: healthCheckAttempted,
+        passed: healthCheckPassed,
+      },
+    },
   });
 
   if (!opts.json) {
