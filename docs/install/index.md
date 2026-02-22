@@ -21,12 +21,49 @@ Already followed [Getting Started](/start/getting-started)? You're all set — t
 On Windows, we strongly recommend running OpenClaw under [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install).
 </Note>
 
+## First deploy in 3 steps (recommended)
+
+<Steps>
+  <Step title="Install OpenClaw">
+    <Tabs>
+      <Tab title="macOS / Linux / WSL2">
+        ```bash
+        curl -fsSL https://openclaw.ai/install.sh | bash
+        ```
+      </Tab>
+      <Tab title="Windows (PowerShell)">
+        ```powershell
+        iwr -useb https://openclaw.ai/install.ps1 | iex
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+  <Step title="Run quickstart onboarding">
+    ```bash
+    openclaw quickstart
+    ```
+
+    CI/non-interactive example:
+
+    ```bash
+    openclaw quickstart --provider openai --api-key <OPENAI_API_KEY> --non-interactive --accept-risk
+    ```
+
+  </Step>
+  <Step title="Verify and open the UI">
+    ```bash
+    openclaw status
+    openclaw dashboard
+    ```
+  </Step>
+</Steps>
+
 ## Path selector
 
 Choose one track to avoid mixing setup styles:
 
 - **Track A: local machine (recommended)**  
-  Use [Getting Started](/start/getting-started) and run the installer script + `openclaw onboard`.
+  Use [Getting Started](/start/getting-started) and run the installer script + `openclaw quickstart`.
 - **Track B: container runtime**  
   Use [Docker](/install/docker) or [Podman](/install/podman).
 - **Track C: remote host or cloud**  
@@ -87,7 +124,7 @@ For VPS/cloud hosts, avoid third-party "1-click" marketplace images when possibl
       <Tab title="npm">
         ```bash
         npm install -g openclaw@latest
-        openclaw onboard --install-daemon
+        openclaw quickstart
         ```
 
         <Accordion title="sharp build errors?">
@@ -104,7 +141,7 @@ For VPS/cloud hosts, avoid third-party "1-click" marketplace images when possibl
         ```bash
         pnpm add -g openclaw@latest
         pnpm approve-builds -g        # approve openclaw, node-llama-cpp, sharp, etc.
-        openclaw onboard --install-daemon
+        openclaw quickstart
         ```
 
         <Note>
@@ -139,9 +176,9 @@ For VPS/cloud hosts, avoid third-party "1-click" marketplace images when possibl
 
         Alternatively, skip the link and run commands via `pnpm openclaw ...` from inside the repo.
       </Step>
-      <Step title="Run onboarding">
+      <Step title="Run quickstart onboarding">
         ```bash
-        openclaw onboard --install-daemon
+        openclaw quickstart
         ```
       </Step>
     </Steps>

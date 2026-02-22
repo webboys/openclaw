@@ -336,24 +336,123 @@ export async function runOnboardingWizard(
   const { applyOnboardingLocalWorkspaceConfig } = await import("../commands/onboard-config.js");
   let nextConfig: OpenClawConfig = applyOnboardingLocalWorkspaceConfig(baseConfig, workspaceDir);
 
-  const { ensureAuthProfileStore } = await import("../agents/auth-profiles.js");
-  const { promptAuthChoiceGrouped } = await import("../commands/auth-choice-prompt.js");
   const { promptCustomApiConfig } = await import("../commands/onboard-custom.js");
   const { applyAuthChoice, resolvePreferredProviderForAuthChoice, warnIfModelConfigLooksOff } =
     await import("../commands/auth-choice.js");
   const { applyPrimaryModel, promptDefaultModel } = await import("../commands/model-picker.js");
 
-  const authStore = ensureAuthProfileStore(undefined, {
-    allowKeychainPrompt: false,
-  });
-  const authChoiceFromPrompt = opts.authChoice === undefined;
-  const authChoice =
-    opts.authChoice ??
-    (await promptAuthChoiceGrouped({
-      prompter,
-      store: authStore,
-      includeSkip: true,
-    }));
+  const useFreshQuickstartProviderPrompt =
+    flow === "quickstart" && !snapshot.exists && opts.authChoice === undefined;
+  let authChoiceFromPrompt = opts.authChoice === undefined;
+  let authChoice = opts.authChoice ?? "skip";
+  let authHandledByNonInteractivePath = false;
+  const authApplyOpts: {
+    tokenProvider?: string;
+    token?: string;
+    cloudflareAiGatewayAccountId?: string;
+    cloudflareAiGatewayGatewayId?: string;
+    cloudflareAiGatewayApiKey?: string;
+    xaiApiKey?: string;
+  } = {
+    tokenProvider: opts.tokenProvider,
+    token: opts.token,
+    cloudflareAiGatewayAccountId: opts.cloudflareAiGatewayAccountId,
+    cloudflareAiGatewayGatewayId: opts.cloudflareAiGatewayGatewayId,
+    cloudflareAiGatewayApiKey: opts.cloudflareAiGatewayApiKey,
+    xaiApiKey: opts.xaiApiKey,
+  };
+
+  if (opts.authChoice === undefined) {
+    if (useFreshQuickstartProviderPrompt) {
+      const { normalizeApiKeyInput, validateApiKeyInput } =
+        await import("../commands/auth-choice.api-key.js");
+      const { listQuickstartProviderPresets, resolveApiKeyOptionKeyForAuthChoice } =
+        await import("../commands/quickstart-provider.js");
+      const quickstartProviders = listQuickstartProviderPresets();
+      const presetById = new Map(quickstartProviders.map((preset) => [preset.id, preset] as const));
+
+      const quickstartSelection = await prompter.select<string>({
+        message: "Quickstart provider",
+        options: [
+          ...quickstartProviders.map((preset) => ({
+            value: preset.id,
+            label: preset.label,
+            hint: preset.authChoice,
+          })),
+          { value: "skip", label: "Skip for now", hint: "Configure provider later" },
+          { value: "advanced", label: "More providers", hint: "Open full provider menu" },
+        ],
+        initialValue: "openai",
+      });
+
+      if (quickstartSelection === "skip") {
+        authChoice = "skip";
+        authChoiceFromPrompt = false;
+      } else if (quickstartSelection === "advanced") {
+        const { ensureAuthProfileStore } = await import("../agents/auth-profiles.js");
+        const { promptAuthChoiceGrouped } = await import("../commands/auth-choice-prompt.js");
+        const authStore = ensureAuthProfileStore(undefined, {
+          allowKeychainPrompt: false,
+        });
+        authChoice = await promptAuthChoiceGrouped({
+          prompter,
+          store: authStore,
+          includeSkip: true,
+        });
+        authChoiceFromPrompt = true;
+      } else {
+        const providerPreset = presetById.get(quickstartSelection);
+        if (providerPreset) {
+          const keyRaw = await prompter.text({
+            message: `Enter ${providerPreset.label} API key`,
+            validate: validateApiKeyInput,
+          });
+          const apiKey = normalizeApiKeyInput(String(keyRaw ?? ""));
+          authChoice = providerPreset.authChoice;
+          authChoiceFromPrompt = false;
+          authApplyOpts.tokenProvider = providerPreset.tokenProvider;
+          authApplyOpts.token = apiKey;
+
+          const optionKey = resolveApiKeyOptionKeyForAuthChoice(authChoice);
+          if (optionKey) {
+            const optsWithApiKey = {
+              ...opts,
+              authChoice,
+              tokenProvider: providerPreset.tokenProvider,
+              token: apiKey,
+              [optionKey]: apiKey,
+            } as OnboardOptions;
+            const { applyNonInteractiveAuthChoice } =
+              await import("../commands/onboard-non-interactive/local/auth-choice.js");
+            const authResult = await applyNonInteractiveAuthChoice({
+              nextConfig,
+              authChoice,
+              opts: optsWithApiKey,
+              runtime,
+              baseConfig,
+            });
+            if (!authResult) {
+              return;
+            }
+            nextConfig = authResult;
+            authHandledByNonInteractivePath = true;
+          }
+        }
+      }
+    } else {
+      const { ensureAuthProfileStore } = await import("../agents/auth-profiles.js");
+      const { promptAuthChoiceGrouped } = await import("../commands/auth-choice-prompt.js");
+      const authStore = ensureAuthProfileStore(undefined, {
+        allowKeychainPrompt: false,
+      });
+      authChoice = await promptAuthChoiceGrouped({
+        prompter,
+        store: authStore,
+        includeSkip: true,
+      });
+      authChoiceFromPrompt = true;
+    }
+  }
 
   if (authChoice === "custom-api-key") {
     const customResult = await promptCustomApiConfig({
@@ -362,17 +461,14 @@ export async function runOnboardingWizard(
       config: nextConfig,
     });
     nextConfig = customResult.config;
-  } else {
+  } else if (!authHandledByNonInteractivePath) {
     const authResult = await applyAuthChoice({
       authChoice,
       config: nextConfig,
       prompter,
       runtime,
       setDefaultModel: true,
-      opts: {
-        tokenProvider: opts.tokenProvider,
-        token: opts.authChoice === "apiKey" && opts.token ? opts.token : undefined,
-      },
+      opts: authApplyOpts,
     });
     nextConfig = authResult.config;
   }

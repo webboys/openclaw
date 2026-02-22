@@ -66,6 +66,19 @@ const coreEntries: CoreCliEntry[] = [
   {
     commands: [
       {
+        name: "quickstart",
+        description: "Fast first-run setup (quickstart flow + daemon + minimal setup)",
+        hasSubcommands: false,
+      },
+    ],
+    register: async ({ program }) => {
+      const mod = await import("./register.quickstart.js");
+      mod.registerQuickstartCommand(program);
+    },
+  },
+  {
+    commands: [
+      {
         name: "configure",
         description:
           "Interactive setup wizard for credentials, channels, gateway, and agent defaults",

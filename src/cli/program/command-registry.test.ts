@@ -55,6 +55,7 @@ describe("command-registry", () => {
     const names = getCoreCliCommandNames();
     expect(names).toContain("agent");
     expect(names).toContain("agents");
+    expect(names).toContain("quickstart");
   });
 
   it("registerCoreCliByName resolves agents to the agent entry", async () => {

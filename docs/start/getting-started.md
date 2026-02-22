@@ -60,13 +60,20 @@ Check your Node version with `node --version` if you are unsure.
     </Note>
 
   </Step>
-  <Step title="Run the onboarding wizard">
+  <Step title="Run quickstart onboarding">
     ```bash
-    openclaw onboard --install-daemon
+    openclaw quickstart
     ```
 
-    The wizard configures auth, gateway settings, and optional channels.
-    See [Onboarding Wizard](/start/wizard) for details.
+    Quickstart keeps first deploy simple: quickstart flow + daemon install,
+    with channels/skills skipped by default.
+    For one-command non-interactive setup, you can also run:
+
+    ```bash
+    openclaw quickstart --provider openai --api-key <OPENAI_API_KEY> --non-interactive --accept-risk
+    ```
+
+    See [Onboarding Wizard](/start/wizard) for full options.
 
   </Step>
   <Step title="Check the Gateway">

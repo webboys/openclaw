@@ -124,6 +124,52 @@ describe("cli program (smoke)", () => {
     expect(onboardCommand).toHaveBeenCalledTimes(expectOnboardCalled ? 1 : 0);
   });
 
+  it("runs quickstart with minimal first-deploy defaults", async () => {
+    await runProgram(["quickstart"]);
+    expect(onboardCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        flow: "quickstart",
+        installDaemon: true,
+        skipChannels: true,
+        skipSkills: true,
+      }),
+      runtime,
+    );
+  });
+
+  it("maps quickstart --provider/--api-key into onboarding auth config", async () => {
+    await runProgram([
+      "quickstart",
+      "--provider",
+      "openai",
+      "--api-key",
+      "sk-openai-test",
+      "--non-interactive",
+      "--accept-risk",
+    ]);
+    expect(onboardCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        flow: "quickstart",
+        nonInteractive: true,
+        acceptRisk: true,
+        authChoice: "openai-api-key",
+        tokenProvider: "openai",
+        token: "sk-openai-test",
+        openaiApiKey: "sk-openai-test",
+      }),
+      runtime,
+    );
+  });
+
+  it("rejects mismatched --provider and --auth-choice combinations", async () => {
+    await expect(
+      runProgram(["quickstart", "--provider", "openai", "--auth-choice", "apiKey"]),
+    ).rejects.toThrow("exit");
+    expect(runtime.error).toHaveBeenCalledWith(
+      "--provider openai implies --auth-choice openai-api-key; remove one of them.",
+    );
+  });
+
   it("passes auth api keys to onboard", async () => {
     const cases = [
       {
