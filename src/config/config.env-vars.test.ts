@@ -29,6 +29,26 @@ describe("config env vars", () => {
     });
   });
 
+  it("ignores dangerous host env var names from config", async () => {
+    await withEnvOverride({ BASH_ENV: undefined, SAFE_KEY: undefined }, async () => {
+      applyConfigEnvVars({
+        env: { vars: { BASH_ENV: "/tmp/pwn.sh", SAFE_KEY: "ok" } },
+      } as OpenClawConfig);
+      expect(process.env.BASH_ENV).toBeUndefined();
+      expect(process.env.SAFE_KEY).toBe("ok");
+    });
+  });
+
+  it("ignores non-portable env var keys from config", async () => {
+    await withEnvOverride({ GOOD_KEY: undefined }, async () => {
+      applyConfigEnvVars({
+        env: { vars: { " BAD KEY": "x", GOOD_KEY: "ok" } as Record<string, string> },
+      } as OpenClawConfig);
+      expect(process.env.GOOD_KEY).toBe("ok");
+      expect(process.env[" BAD KEY"]).toBeUndefined();
+    });
+  });
+
   it("loads ${VAR} substitutions from ~/.openclaw/.env on repeated runtime loads", async () => {
     await withTempHome(async (_home) => {
       await withEnvOverride({ BRAVE_API_KEY: undefined }, async () => {
