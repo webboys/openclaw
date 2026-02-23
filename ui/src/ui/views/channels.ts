@@ -19,12 +19,34 @@ import { renderDiscordCard } from "./channels.discord.ts";
 import { renderGoogleChatCard } from "./channels.googlechat.ts";
 import { renderIMessageCard } from "./channels.imessage.ts";
 import { renderNostrCard } from "./channels.nostr.ts";
-import { channelEnabled, renderChannelAccountCount } from "./channels.shared.ts";
+import {
+  boolLabel,
+  channelEnabled,
+  localizeChannelValue,
+  renderChannelAccountCount,
+  renderChannelStatusList,
+} from "./channels.shared.ts";
 import { renderSignalCard } from "./channels.signal.ts";
 import { renderSlackCard } from "./channels.slack.ts";
 import { renderTelegramCard } from "./channels.telegram.ts";
 import type { ChannelKey, ChannelsChannelData, ChannelsProps } from "./channels.types.ts";
 import { renderWhatsAppCard } from "./channels.whatsapp.ts";
+import {
+  calloutClass,
+  CARD_CLASS,
+  CARD_SUB_CLASS,
+  CARD_TITLE_CLASS,
+  CODE_BLOCK_CLASS,
+  LIST_CLASS,
+  LIST_ITEM_CLASS,
+  LIST_MAIN_CLASS,
+  LIST_SUB_CLASS,
+  LIST_TITLE_CLASS,
+  MUTED_TEXT_CLASS,
+  STATUS_LABEL_CLASS,
+  STATUS_ROW_CLASS,
+  STATUS_VALUE_CLASS,
+} from "./tw.ts";
 
 export function renderChannels(props: ChannelsProps) {
   const channels = props.snapshot?.channels as Record<string, unknown> | null;
@@ -36,7 +58,7 @@ export function renderChannels(props: ChannelsProps) {
   const signal = (channels?.signal ?? null) as SignalStatus | null;
   const imessage = (channels?.imessage ?? null) as IMessageStatus | null;
   const nostr = (channels?.nostr ?? null) as NostrStatus | null;
-  const channelOrder = resolveChannelOrder(props.snapshot);
+  const channelOrder = resolveChannelOrder(props.snapshot, props.configForm);
   const orderedChannels = channelOrder
     .map((key, index) => ({
       key,
@@ -51,7 +73,7 @@ export function renderChannels(props: ChannelsProps) {
     });
 
   return html`
-    <section class="grid grid-cols-2">
+    <section class="grid gap-4 xl:grid-cols-2">
       ${orderedChannels.map((channel) =>
         renderChannel(channel.key, props, {
           whatsapp,
@@ -67,36 +89,87 @@ export function renderChannels(props: ChannelsProps) {
       )}
     </section>
 
-    <section class="card" style="margin-top: 18px;">
-      <div class="row" style="justify-content: space-between;">
+    <section class="${CARD_CLASS} mt-4">
+      <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <div class="card-title">Channel health</div>
-          <div class="card-sub">Channel status snapshots from the gateway.</div>
+          <div class=${CARD_TITLE_CLASS}>机器人健康状态</div>
+          <div class=${CARD_SUB_CLASS}>来自网关的各机器人状态快照。</div>
         </div>
-        <div class="muted">${props.lastSuccessAt ? formatRelativeTimestamp(props.lastSuccessAt) : "n/a"}</div>
+        <div class=${MUTED_TEXT_CLASS}>
+          最近成功刷新: ${props.lastSuccessAt ? formatRelativeTimestamp(props.lastSuccessAt) : "暂无"}
+        </div>
       </div>
       ${
         props.lastError
-          ? html`<div class="callout danger" style="margin-top: 12px;">
-            ${props.lastError}
+          ? html`<div class="${calloutClass("danger")} mt-3">
+            ${localizeChannelValue(props.lastError)}
           </div>`
           : nothing
       }
-      <pre class="code-block" style="margin-top: 12px;">
-${props.snapshot ? JSON.stringify(props.snapshot, null, 2) : "No snapshot yet."}
+      <pre class="${CODE_BLOCK_CLASS} mt-3">
+${props.snapshot ? JSON.stringify(props.snapshot, null, 2) : "暂无快照。"}
       </pre>
     </section>
   `;
 }
 
-function resolveChannelOrder(snapshot: ChannelsStatusSnapshot | null): ChannelKey[] {
-  if (snapshot?.channelMeta?.length) {
-    return snapshot.channelMeta.map((entry) => entry.id);
+const DEFAULT_FALLBACK_CHANNEL_ORDER: ChannelKey[] = [
+  "whatsapp",
+  "telegram",
+  "discord",
+  "googlechat",
+  "slack",
+  "signal",
+  "imessage",
+  "nostr",
+  "qq",
+];
+
+const CHANNEL_LABEL_FALLBACKS: Record<string, string> = {
+  qq: "QQ",
+};
+
+function appendUniqueChannelId(order: string[], seen: Set<string>, id: string | null | undefined) {
+  const value = typeof id === "string" ? id.trim() : "";
+  if (!value || seen.has(value)) {
+    return;
   }
-  if (snapshot?.channelOrder?.length) {
-    return snapshot.channelOrder;
+  seen.add(value);
+  order.push(value);
+}
+
+function resolveChannelOrder(
+  snapshot: ChannelsStatusSnapshot | null,
+  configForm: Record<string, unknown> | null,
+): ChannelKey[] {
+  const order: string[] = [];
+  const seen = new Set<string>();
+
+  for (const entry of snapshot?.channelMeta ?? []) {
+    appendUniqueChannelId(order, seen, entry.id);
   }
-  return ["whatsapp", "telegram", "discord", "googlechat", "slack", "signal", "imessage", "nostr"];
+  for (const id of snapshot?.channelOrder ?? []) {
+    appendUniqueChannelId(order, seen, id);
+  }
+  for (const id of Object.keys(snapshot?.channels ?? {})) {
+    appendUniqueChannelId(order, seen, id);
+  }
+  for (const id of Object.keys(snapshot?.channelLabels ?? {})) {
+    appendUniqueChannelId(order, seen, id);
+  }
+
+  const channelsNode = configForm?.channels;
+  if (channelsNode && typeof channelsNode === "object" && !Array.isArray(channelsNode)) {
+    for (const id of Object.keys(channelsNode as Record<string, unknown>)) {
+      appendUniqueChannelId(order, seen, id);
+    }
+  }
+
+  for (const id of DEFAULT_FALLBACK_CHANNEL_ORDER) {
+    appendUniqueChannelId(order, seen, id);
+  }
+
+  return order;
 }
 
 function renderChannel(key: ChannelKey, props: ChannelsProps, data: ChannelsChannelData) {
@@ -192,40 +265,29 @@ function renderGenericChannelCard(
   const accountCountLabel = renderChannelAccountCount(key, channelAccounts);
 
   return html`
-    <div class="card">
-      <div class="card-title">${label}</div>
-      <div class="card-sub">Channel status and configuration.</div>
+    <div class=${CARD_CLASS}>
+      <div class=${CARD_TITLE_CLASS}>${label}</div>
+      <div class=${CARD_SUB_CLASS}>机器人状态与设置。</div>
       ${accountCountLabel}
 
       ${
         accounts.length > 0
           ? html`
-            <div class="account-card-list">
+            <div class=${LIST_CLASS}>
               ${accounts.map((account) => renderGenericAccount(account))}
             </div>
           `
-          : html`
-            <div class="status-list" style="margin-top: 16px;">
-              <div>
-                <span class="label">Configured</span>
-                <span>${configured == null ? "n/a" : configured ? "Yes" : "No"}</span>
-              </div>
-              <div>
-                <span class="label">Running</span>
-                <span>${running == null ? "n/a" : running ? "Yes" : "No"}</span>
-              </div>
-              <div>
-                <span class="label">Connected</span>
-                <span>${connected == null ? "n/a" : connected ? "Yes" : "No"}</span>
-              </div>
-            </div>
-          `
+          : renderChannelStatusList([
+              { label: "已配置", value: boolLabel(configured) },
+              { label: "运行中", value: boolLabel(running) },
+              { label: "已连接", value: boolLabel(connected) },
+            ])
       }
 
       ${
         lastError
-          ? html`<div class="callout danger" style="margin-top: 12px;">
-            ${lastError}
+          ? html`<div class="${calloutClass("danger")} mt-3">
+            ${localizeChannelValue(lastError)}
           </div>`
           : nothing
       }
@@ -246,7 +308,7 @@ function resolveChannelMetaMap(
 
 function resolveChannelLabel(snapshot: ChannelsStatusSnapshot | null, key: string): string {
   const meta = resolveChannelMetaMap(snapshot)[key];
-  return meta?.label ?? snapshot?.channelLabels?.[key] ?? key;
+  return meta?.label ?? snapshot?.channelLabels?.[key] ?? CHANNEL_LABEL_FALLBACKS[key] ?? key;
 }
 
 const RECENT_ACTIVITY_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
@@ -258,29 +320,29 @@ function hasRecentActivity(account: ChannelAccountSnapshot): boolean {
   return Date.now() - account.lastInboundAt < RECENT_ACTIVITY_THRESHOLD_MS;
 }
 
-function deriveRunningStatus(account: ChannelAccountSnapshot): "Yes" | "No" | "Active" {
+function deriveRunningStatus(account: ChannelAccountSnapshot): "是" | "否" | "活跃" {
   if (account.running) {
-    return "Yes";
+    return "是";
   }
   // If we have recent inbound activity, the channel is effectively running
   if (hasRecentActivity(account)) {
-    return "Active";
+    return "活跃";
   }
-  return "No";
+  return "否";
 }
 
-function deriveConnectedStatus(account: ChannelAccountSnapshot): "Yes" | "No" | "Active" | "n/a" {
+function deriveConnectedStatus(account: ChannelAccountSnapshot): "是" | "否" | "活跃" | "不适用" {
   if (account.connected === true) {
-    return "Yes";
+    return "是";
   }
   if (account.connected === false) {
-    return "No";
+    return "否";
   }
   // If connected is null/undefined but we have recent activity, show as active
   if (hasRecentActivity(account)) {
-    return "Active";
+    return "活跃";
   }
-  return "n/a";
+  return "不适用";
 }
 
 function renderGenericAccount(account: ChannelAccountSnapshot) {
@@ -288,35 +350,37 @@ function renderGenericAccount(account: ChannelAccountSnapshot) {
   const connectedStatus = deriveConnectedStatus(account);
 
   return html`
-    <div class="account-card">
-      <div class="account-card-header">
-        <div class="account-card-title">${account.name || account.accountId}</div>
-        <div class="account-card-id">${account.accountId}</div>
+    <div class=${LIST_ITEM_CLASS}>
+      <div class=${LIST_MAIN_CLASS}>
+        <div class=${LIST_TITLE_CLASS}>${account.name || account.accountId}</div>
+        <div class=${LIST_SUB_CLASS}>${account.accountId}</div>
       </div>
-      <div class="status-list account-card-status">
-        <div>
-          <span class="label">Running</span>
-          <span>${runningStatus}</span>
-        </div>
-        <div>
-          <span class="label">Configured</span>
-          <span>${account.configured ? "Yes" : "No"}</span>
-        </div>
-        <div>
-          <span class="label">Connected</span>
-          <span>${connectedStatus}</span>
-        </div>
-        <div>
-          <span class="label">Last inbound</span>
-          <span>${account.lastInboundAt ? formatRelativeTimestamp(account.lastInboundAt) : "n/a"}</span>
+      <div class="w-full">
+        <div class="overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg-elevated)]">
+          <div class=${STATUS_ROW_CLASS}>
+            <span class=${STATUS_LABEL_CLASS}>运行中</span>
+            <span class=${STATUS_VALUE_CLASS}>${runningStatus}</span>
+          </div>
+          <div class=${STATUS_ROW_CLASS}>
+            <span class=${STATUS_LABEL_CLASS}>已配置</span>
+            <span class=${STATUS_VALUE_CLASS}>${account.configured ? "是" : "否"}</span>
+          </div>
+          <div class=${STATUS_ROW_CLASS}>
+            <span class=${STATUS_LABEL_CLASS}>已连接</span>
+            <span class=${STATUS_VALUE_CLASS}>${connectedStatus}</span>
+          </div>
+          <div class=${STATUS_ROW_CLASS}>
+            <span class=${STATUS_LABEL_CLASS}>最后入站</span>
+            <span class=${STATUS_VALUE_CLASS}>
+              ${account.lastInboundAt ? formatRelativeTimestamp(account.lastInboundAt) : "暂无"}
+            </span>
+          </div>
         </div>
         ${
           account.lastError
-            ? html`
-              <div class="account-card-error">
-                ${account.lastError}
-              </div>
-            `
+            ? html`<div class="pt-2 text-[12px] text-[var(--danger)]">
+                ${localizeChannelValue(account.lastError)}
+              </div>`
             : nothing
         }
       </div>

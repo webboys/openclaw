@@ -59,6 +59,33 @@ const DEFAULT_CATALOG_PATHS = [
 
 const ENV_CATALOG_PATHS = ["OPENCLAW_PLUGIN_CATALOG_PATHS", "OPENCLAW_MPM_CATALOG_PATHS"];
 
+// Keep a minimal built-in fallback so onboarding can still offer official
+// channels even when bundled/local catalogs are unavailable.
+const BUILTIN_CHANNEL_CATALOG_ENTRIES: ExternalCatalogEntry[] = [
+  {
+    name: "@openclaw/qq",
+    [MANIFEST_KEY]: {
+      channel: {
+        id: "qq",
+        label: "QQ",
+        selectionLabel: "QQ (Official Bot API)",
+        detailLabel: "QQ Bot",
+        docsPath: "/channels/qq",
+        docsLabel: "qq",
+        blurb: "QQ official bot callback + send API integration.",
+        aliases: ["qqbot"],
+        order: 78,
+        quickstartAllowFrom: true,
+      },
+      install: {
+        npmSpec: "@openclaw/qq",
+        localPath: "extensions/qq",
+        defaultChoice: "npm",
+      },
+    },
+  },
+];
+
 type ManifestKey = typeof MANIFEST_KEY;
 
 function parseCatalogEntries(raw: unknown): ExternalCatalogEntry[] {
@@ -228,6 +255,12 @@ function buildExternalCatalogEntry(entry: ExternalCatalogEntry): ChannelPluginCa
   });
 }
 
+function loadBuiltinCatalogEntries(): ChannelPluginCatalogEntry[] {
+  return BUILTIN_CHANNEL_CATALOG_ENTRIES.map((entry) => buildExternalCatalogEntry(entry)).filter(
+    (entry): entry is ChannelPluginCatalogEntry => Boolean(entry),
+  );
+}
+
 export function buildChannelUiCatalog(
   plugins: Array<{ id: string; meta: ChannelMeta }>,
 ): ChannelUiCatalog {
@@ -280,6 +313,12 @@ export function listChannelPluginCatalogEntries(
   for (const entry of externalEntries) {
     if (!resolved.has(entry.id)) {
       resolved.set(entry.id, { entry, priority: 99 });
+    }
+  }
+
+  for (const entry of loadBuiltinCatalogEntries()) {
+    if (!resolved.has(entry.id)) {
+      resolved.set(entry.id, { entry, priority: 100 });
     }
   }
 

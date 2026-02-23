@@ -78,6 +78,13 @@ describe("channel plugin catalog", () => {
     expect(entry?.meta.aliases).toContain("teams");
   });
 
+  it("includes QQ official bot entry", () => {
+    const entry = getChannelPluginCatalogEntry("qq");
+    expect(entry?.install.npmSpec).toBe("@openclaw/qq");
+    expect(entry?.meta.selectionLabel).toContain("Official Bot API");
+    expect(entry?.meta.aliases).toContain("qqbot");
+  });
+
   it("lists plugin catalog entries", () => {
     const ids = listChannelPluginCatalogEntries().map((entry) => entry.id);
     expect(ids).toContain("msteams");
