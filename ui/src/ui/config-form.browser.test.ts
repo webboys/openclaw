@@ -263,4 +263,58 @@ describe("config form renderer", () => {
     const analysis = analyzeConfigSchema(schema);
     expect(analysis.unsupportedPaths).toContain("extra");
   });
+
+  it("collapses non-minimal sections by default", () => {
+    const onPatch = vi.fn();
+    const container = document.createElement("div");
+    const schema = {
+      type: "object",
+      properties: {
+        channels: { type: "object", properties: {} },
+        hooks: { type: "object", properties: {} },
+      },
+    };
+    const analysis = analyzeConfigSchema(schema);
+    render(
+      renderConfigForm({
+        schema: analysis.schema,
+        uiHints: {},
+        unsupportedPaths: analysis.unsupportedPaths,
+        value: {},
+        onPatch,
+      }),
+      container,
+    );
+
+    const channelsSection = container.querySelector("#config-section-channels");
+    const hooksSection = container.querySelector("#config-section-hooks");
+    expect((channelsSection as HTMLDetailsElement | null)?.open).toBe(true);
+    expect((hooksSection as HTMLDetailsElement | null)?.open).toBe(false);
+  });
+
+  it("opens the currently selected section", () => {
+    const onPatch = vi.fn();
+    const container = document.createElement("div");
+    const schema = {
+      type: "object",
+      properties: {
+        hooks: { type: "object", properties: {} },
+      },
+    };
+    const analysis = analyzeConfigSchema(schema);
+    render(
+      renderConfigForm({
+        schema: analysis.schema,
+        uiHints: {},
+        unsupportedPaths: analysis.unsupportedPaths,
+        value: {},
+        activeSection: "hooks",
+        onPatch,
+      }),
+      container,
+    );
+
+    const hooksSection = container.querySelector("#config-section-hooks");
+    expect((hooksSection as HTMLDetailsElement | null)?.open).toBe(true);
+  });
 });

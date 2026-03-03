@@ -24,6 +24,22 @@ export type ConfigFormProps = {
 
 export const SECTION_META = CONFIG_SECTION_META;
 
+const MINIMAL_OPEN_SECTION_KEYS = new Set(["agents", "auth", "channels", "gateway"]);
+
+function shouldOpenSectionCard(params: {
+  sectionKey: string;
+  activeSection?: string | null;
+  searchQuery?: string;
+}): boolean {
+  if (params.searchQuery) {
+    return true;
+  }
+  if (params.activeSection && params.sectionKey === params.activeSection) {
+    return true;
+  }
+  return MINIMAL_OPEN_SECTION_KEYS.has(params.sectionKey);
+}
+
 function matchesSearch(key: string, schema: JsonSchema, query: string): boolean {
   if (!query) {
     return true;
@@ -213,10 +229,19 @@ export function renderConfigForm(props: ConfigFormProps) {
             })()
           : filteredEntries.map(([key, node]) => {
               const meta = resolveConfigSectionMeta(key, node);
+              const openByDefault = shouldOpenSectionCard({
+                sectionKey: key,
+                activeSection,
+                searchQuery,
+              });
 
               return html`
-              <section class="config-section-card" id="config-section-${key}">
-                <div class="config-section-card__header">
+              <details
+                class="config-section-card config-section-card--collapsible"
+                id="config-section-${key}"
+                ?open=${openByDefault}
+              >
+                <summary class="config-section-card__header config-section-card__header--summary">
                   <span class="config-section-card__icon">${renderConfigSectionIcon(key)}</span>
                   <div class="config-section-card__titles">
                     <h3 class="config-section-card__title">${meta.label}</h3>
@@ -226,7 +251,8 @@ export function renderConfigForm(props: ConfigFormProps) {
                         : nothing
                     }
                   </div>
-                </div>
+                  <span class="config-section-card__chevron">${icons.arrowDown}</span>
+                </summary>
                 <div class="config-section-card__content">
                   ${renderNode({
                     schema: node,
@@ -239,7 +265,7 @@ export function renderConfigForm(props: ConfigFormProps) {
                     onPatch: props.onPatch,
                   })}
                 </div>
-              </section>
+              </details>
             `;
             })
       }

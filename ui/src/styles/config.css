@@ -564,8 +564,29 @@
   border-bottom: 1px solid var(--border);
 }
 
+.config-section-card__header--summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.config-section-card__header--summary::-webkit-details-marker {
+  display: none;
+}
+
+.config-section-card--collapsible:not([open]) .config-section-card__header {
+  border-bottom: none;
+}
+
+.config-section-card__header--summary:hover {
+  background: var(--bg-hover);
+}
+
 :root[data-theme="light"] .config-section-card__header {
   background: var(--bg-hover);
+}
+
+:root[data-theme="light"] .config-section-card__header--summary:hover {
+  background: rgba(0, 0, 0, 0.06);
 }
 
 .config-section-card__icon {
@@ -601,6 +622,23 @@
   font-size: 13px;
   color: var(--muted);
   line-height: 1.45;
+}
+
+.config-section-card__chevron {
+  width: 18px;
+  height: 18px;
+  color: var(--muted);
+  flex-shrink: 0;
+  transition: transform var(--duration-normal) var(--ease-out);
+}
+
+.config-section-card__chevron svg {
+  width: 100%;
+  height: 100%;
+}
+
+.config-section-card--collapsible[open] .config-section-card__chevron {
+  transform: rotate(180deg);
 }
 
 .config-section-card__content {
